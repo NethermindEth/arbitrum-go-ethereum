@@ -290,6 +290,10 @@ func (c *MessageRunContext) IsSequencing() bool {
 	return c.runMode == messageSequencingMode
 }
 
+func (c *MessageRunContext) GetRawRunMode() uint8 {
+	return uint8(c.runMode)
+}
+
 func (c *MessageRunContext) IsCommitMode() bool {
 	return c.runMode == messageCommitMode || c.runMode == messageSequencingMode
 }
