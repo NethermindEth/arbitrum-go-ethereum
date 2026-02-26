@@ -299,6 +299,101 @@ var WrapHTTPHandler = func(srv http.Handler) (http.Handler, error) {
 	return srv, nil
 }
 
+// ResponseHeaderData holds headers to be added to the HTTP response.
+// RPC handlers can add headers via SetResponseHeader, and they will be
+// injected before the response is sent. This struct is placed in the
+// request context and is safe for concurrent access.
+type ResponseHeaderData struct {
+	mu      sync.Mutex
+	headers map[string]string
+}
+
+type responseHeaderDataKey struct{}
+
+// SetResponseHeader adds a header to be sent with the HTTP response.
+// This can be called from RPC handlers to add custom headers.
+// If header injection is not enabled for this request, this is a no-op.
+func SetResponseHeader(ctx context.Context, key, value string) {
+	data := ctx.Value(responseHeaderDataKey{})
+	if data == nil {
+		return // header injection not enabled for this request
+	}
+	rhd := data.(*ResponseHeaderData)
+	rhd.mu.Lock()
+	defer rhd.mu.Unlock()
+	if rhd.headers == nil {
+		rhd.headers = make(map[string]string)
+	}
+	rhd.headers[key] = value
+}
+
+// GetResponseHeaders returns all headers that have been set for this response.
+// Returns nil if no headers have been set or if header injection is not enabled.
+func GetResponseHeaders(ctx context.Context) map[string]string {
+	data := ctx.Value(responseHeaderDataKey{})
+	if data == nil {
+		return nil
+	}
+	rhd := data.(*ResponseHeaderData)
+	rhd.mu.Lock()
+	defer rhd.mu.Unlock()
+	if rhd.headers == nil {
+		return nil
+	}
+	// Return a copy to avoid races
+	result := make(map[string]string, len(rhd.headers))
+	for k, v := range rhd.headers {
+		result[k] = v
+	}
+	return result
+}
+
+// headerInjectingResponseWriter wraps http.ResponseWriter to inject headers
+// that were set via SetResponseHeader before the response is written.
+type headerInjectingResponseWriter struct {
+	http.ResponseWriter
+	headerData      *ResponseHeaderData
+	headersInjected bool
+}
+
+func (w *headerInjectingResponseWriter) injectHeaders() {
+	if w.headersInjected {
+		return
+	}
+	w.headersInjected = true
+
+	w.headerData.mu.Lock()
+	defer w.headerData.mu.Unlock()
+	for key, value := range w.headerData.headers {
+		w.ResponseWriter.Header().Set(key, value)
+	}
+}
+
+func (w *headerInjectingResponseWriter) WriteHeader(statusCode int) {
+	w.injectHeaders()
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *headerInjectingResponseWriter) Write(data []byte) (int, error) {
+	w.injectHeaders()
+	return w.ResponseWriter.Write(data)
+}
+
+// newHeaderInjectingHandler wraps an http.Handler to enable response header injection.
+// It creates a ResponseHeaderData container in the request context that RPC handlers
+// can use via SetResponseHeader to add custom headers to the response.
+func newHeaderInjectingHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headerData := &ResponseHeaderData{}
+		ctx := context.WithValue(r.Context(), responseHeaderDataKey{}, headerData)
+		wrapper := &headerInjectingResponseWriter{
+			ResponseWriter: w,
+			headerData:     headerData,
+		}
+		next.ServeHTTP(wrapper, r.WithContext(ctx))
+	})
+}
+
 // enableRPC turns on JSON-RPC over HTTP on the server.
 func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error {
 	h.mu.Lock()
@@ -419,6 +514,9 @@ func NewHTTPHandlerStack(srv http.Handler, cors []string, vhosts []string, jwtSe
 	if len(jwtSecret) != 0 {
 		handler = newJWTHandler(jwtSecret, handler)
 	}
+	// Inject custom response headers from registered providers.
+	// This must be before gzip so headers are added before compression.
+	handler = newHeaderInjectingHandler(handler)
 	return newGzipHandler(handler)
 }
 
