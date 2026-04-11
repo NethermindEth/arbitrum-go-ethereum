@@ -167,6 +167,11 @@ func (db *HistoricDB) WasmStore() ethdb.KeyValueStore {
 	return db.wasmdb
 }
 
+// MaxStylusOpenPages returns 0 (limit disabled) because HistoricDB is only used
+// for historical state queries, not for transaction execution where the limit applies.
+func (db *HistoricDB) MaxStylusOpenPages() uint16        { return 0 }
+func (db *HistoricDB) SetMaxStylusOpenPages(limit uint16) {}
+
 func (db *HistoricDB) DiskDB() ethdb.KeyValueStore {
 	return db.disk
 }

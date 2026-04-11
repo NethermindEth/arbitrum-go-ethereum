@@ -16,3 +16,8 @@ func (db *CachingDB) ActivatedAsm(target rawdb.WasmTarget, moduleHash common.Has
 	}
 	return asm
 }
+
+// maxStylusOpenPages is set once during ExecutionEngine.Initialize (before transaction
+// processing starts) and only read afterward, so atomic access is not needed.
+func (db *CachingDB) MaxStylusOpenPages() uint16        { return db.maxStylusOpenPages }
+func (db *CachingDB) SetMaxStylusOpenPages(limit uint16) { db.maxStylusOpenPages = limit }

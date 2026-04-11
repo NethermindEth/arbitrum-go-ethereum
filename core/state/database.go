@@ -53,6 +53,11 @@ type Database interface {
 	ActivatedAsm(target rawdb.WasmTarget, moduleHash common.Hash) []byte
 	WasmStore() ethdb.KeyValueStore
 
+	// Arbitrum: node-level limit on open Stylus WASM pages per transaction.
+	// Returns 0 if no limit is configured.
+	MaxStylusOpenPages() uint16
+	SetMaxStylusOpenPages(limit uint16)
+
 	// Reader returns a state reader associated with the specified state root.
 	Reader(root common.Hash) (Reader, error)
 
@@ -170,7 +175,8 @@ type activatedAsmCacheKey struct {
 // long-live object and has a few caches inside for sharing between blocks.
 type CachingDB struct {
 	// Arbitrum
-	activatedAsmCache *lru.SizeConstrainedCache[activatedAsmCacheKey, []byte]
+	activatedAsmCache  *lru.SizeConstrainedCache[activatedAsmCacheKey, []byte]
+	maxStylusOpenPages uint16
 
 	disk          ethdb.KeyValueStore
 	wasmdb        ethdb.KeyValueStore
