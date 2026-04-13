@@ -102,12 +102,13 @@ func (r *historicReader) Storage(addr common.Address, key common.Hash) (common.H
 // HistoricDB is the implementation of Database interface, with the ability to
 // access historical state.
 type HistoricDB struct {
-	disk          ethdb.KeyValueStore
-	wasmdb        ethdb.KeyValueStore
-	triedb        *triedb.Database
-	codeCache     *lru.SizeConstrainedCache[common.Hash, []byte]
-	codeSizeCache *lru.Cache[common.Hash, int]
-	pointCache    *utils.PointCache
+	disk             ethdb.KeyValueStore
+	wasmdb           ethdb.KeyValueStore
+	triedb           *triedb.Database
+	codeCache        *lru.SizeConstrainedCache[common.Hash, []byte]
+	codeSizeCache    *lru.Cache[common.Hash, int]
+	pointCache       *utils.PointCache
+	stylusNodeConfig any
 }
 
 // NewHistoricDatabase creates a historic state database.
@@ -167,11 +168,14 @@ func (db *HistoricDB) WasmStore() ethdb.KeyValueStore {
 	return db.wasmdb
 }
 
-// StylusNodeConfig returns nil because HistoricDB is only used for historical
-// state queries, not for transaction execution where the node-level Stylus
-// config applies.
-func (db *HistoricDB) StylusNodeConfig() any       { return nil }
-func (db *HistoricDB) SetStylusNodeConfig(cfg any) {}
+// StylusNodeConfig / SetStylusNodeConfig mirror the CachingDB pair so that
+// historical-state execution paths (e.g., eth_call / tracers / estimate-gas
+// falling back to HistoricState under pathdb) see the same node-level Stylus
+// config as the live CachingDB. The caller is responsible for copying the
+// value from the live Database into the HistoricDB at construction time (see
+// BlockChain.HistoricState).
+func (db *HistoricDB) StylusNodeConfig() any       { return db.stylusNodeConfig }
+func (db *HistoricDB) SetStylusNodeConfig(cfg any) { db.stylusNodeConfig = cfg }
 
 func (db *HistoricDB) DiskDB() ethdb.KeyValueStore {
 	return db.disk

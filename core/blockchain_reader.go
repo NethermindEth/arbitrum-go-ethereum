@@ -421,7 +421,12 @@ func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
 // Live states are not available and won't be served, please use `State`
 // or `StateAt` instead.
 func (bc *BlockChain) HistoricState(root common.Hash) (*state.StateDB, error) {
-	return state.New(root, state.NewHistoricDatabase(bc.db, bc.triedb))
+	hdb := state.NewHistoricDatabase(bc.db, bc.triedb)
+	// Propagate the node-level Stylus config from the live Database so that
+	// tx execution against historical state (eth_call / tracers / estimate-gas
+	// under pathdb fallback) enforces the same limits as live execution.
+	hdb.SetStylusNodeConfig(bc.statedb.StylusNodeConfig())
+	return state.New(root, hdb)
 }
 
 // Config retrieves the chain's fork configuration.

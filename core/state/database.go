@@ -54,9 +54,8 @@ type Database interface {
 	WasmStore() ethdb.KeyValueStore
 
 	// Arbitrum: opaque slot for Nitro-defined node-level Stylus configuration.
-	// Geth treats the value as opaque; Nitro stores a typed config struct
-	// (currently *programs.StylusNodeConfig) and asserts the type at the read
-	// site.
+	// Geth treats the value as opaque; Nitro stores and type-asserts its own
+	// config struct at the read site.
 	StylusNodeConfig() any
 	SetStylusNodeConfig(cfg any)
 
