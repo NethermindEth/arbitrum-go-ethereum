@@ -53,10 +53,12 @@ type Database interface {
 	ActivatedAsm(target rawdb.WasmTarget, moduleHash common.Hash) []byte
 	WasmStore() ethdb.KeyValueStore
 
-	// Arbitrum: node-level limit on open Stylus WASM pages per transaction.
-	// Returns 0 if no limit is configured.
-	MaxStylusOpenPages() uint16
-	SetMaxStylusOpenPages(limit uint16)
+	// Arbitrum: opaque slot for Nitro-defined node-level Stylus configuration.
+	// Geth treats the value as opaque; Nitro stores a typed config struct
+	// (currently *programs.StylusNodeConfig) and asserts the type at the read
+	// site.
+	StylusNodeConfig() any
+	SetStylusNodeConfig(cfg any)
 
 	// Reader returns a state reader associated with the specified state root.
 	Reader(root common.Hash) (Reader, error)
@@ -175,8 +177,8 @@ type activatedAsmCacheKey struct {
 // long-live object and has a few caches inside for sharing between blocks.
 type CachingDB struct {
 	// Arbitrum
-	activatedAsmCache  *lru.SizeConstrainedCache[activatedAsmCacheKey, []byte]
-	maxStylusOpenPages uint16
+	activatedAsmCache *lru.SizeConstrainedCache[activatedAsmCacheKey, []byte]
+	stylusNodeConfig  any
 
 	disk          ethdb.KeyValueStore
 	wasmdb        ethdb.KeyValueStore
