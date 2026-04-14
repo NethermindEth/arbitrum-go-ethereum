@@ -102,13 +102,13 @@ func (r *historicReader) Storage(addr common.Address, key common.Hash) (common.H
 // HistoricDB is the implementation of Database interface, with the ability to
 // access historical state.
 type HistoricDB struct {
-	disk             ethdb.KeyValueStore
-	wasmdb           ethdb.KeyValueStore
-	triedb           *triedb.Database
-	codeCache        *lru.SizeConstrainedCache[common.Hash, []byte]
-	codeSizeCache    *lru.Cache[common.Hash, int]
-	pointCache       *utils.PointCache
-	stylusNodeConfig any
+	disk          ethdb.KeyValueStore
+	wasmdb        ethdb.KeyValueStore
+	triedb        *triedb.Database
+	codeCache     *lru.SizeConstrainedCache[common.Hash, []byte]
+	codeSizeCache *lru.Cache[common.Hash, int]
+	pointCache    *utils.PointCache
+	arbNodeConfig any
 }
 
 // NewHistoricDatabase creates a historic state database.
@@ -168,14 +168,13 @@ func (db *HistoricDB) WasmStore() ethdb.KeyValueStore {
 	return db.wasmdb
 }
 
-// StylusNodeConfig / SetStylusNodeConfig mirror the CachingDB pair so that
+// ArbNodeConfig / SetArbNodeConfig mirror the CachingDB pair so that
 // historical-state execution paths (e.g., eth_call / tracers / estimate-gas
-// falling back to HistoricState under pathdb) see the same node-level Stylus
-// config as the live CachingDB. The caller is responsible for copying the
-// value from the live Database into the HistoricDB at construction time (see
-// BlockChain.HistoricState).
-func (db *HistoricDB) StylusNodeConfig() any       { return db.stylusNodeConfig }
-func (db *HistoricDB) SetStylusNodeConfig(cfg any) { db.stylusNodeConfig = cfg }
+// falling back to HistoricState under pathdb) see the same node-level config
+// as the live CachingDB. The caller copies the value from the live Database
+// into the HistoricDB at construction time (see BlockChain.HistoricState).
+func (db *HistoricDB) ArbNodeConfig() any       { return db.arbNodeConfig }
+func (db *HistoricDB) SetArbNodeConfig(cfg any) { db.arbNodeConfig = cfg }
 
 func (db *HistoricDB) DiskDB() ethdb.KeyValueStore {
 	return db.disk

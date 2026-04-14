@@ -422,10 +422,9 @@ func (bc *BlockChain) StateAt(root common.Hash) (*state.StateDB, error) {
 // or `StateAt` instead.
 func (bc *BlockChain) HistoricState(root common.Hash) (*state.StateDB, error) {
 	hdb := state.NewHistoricDatabase(bc.db, bc.triedb)
-	// Propagate the node-level Stylus config from the live Database so that
-	// tx execution against historical state (eth_call / tracers / estimate-gas
-	// under pathdb fallback) enforces the same limits as live execution.
-	hdb.SetStylusNodeConfig(bc.statedb.StylusNodeConfig())
+	// Propagate node-level config from the live Database so that tx execution
+	// against historical state uses the same settings as live execution.
+	hdb.SetArbNodeConfig(bc.statedb.ArbNodeConfig())
 	return state.New(root, hdb)
 }
 
