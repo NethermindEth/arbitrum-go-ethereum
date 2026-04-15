@@ -280,9 +280,10 @@ func NewMessageGasEstimationContext() *MessageRunContext {
 }
 
 // IsSequencing returns true only when the sequencer is actively building a
-// block from a batch-posted L2 transaction. This is the predicate that gates
-// pre-inclusion filtering (e.g. db.FilterTx). Delayed-inbox sequencing does
-// NOT satisfy this — use IsDelayedSequencing for that case.
+// block from a directly-received (not-yet-batch-posted) L2 transaction. This
+// is the predicate that gates pre-inclusion filtering (e.g. db.FilterTx).
+// Delayed-inbox sequencing does NOT satisfy this — use IsDelayedSequencing
+// for that case.
 func (c *MessageRunContext) IsSequencing() bool {
 	return c.runMode == messageSequencingMode
 }
