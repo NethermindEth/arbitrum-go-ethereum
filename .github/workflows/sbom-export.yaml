@@ -4,14 +4,14 @@ on:
   push:
     branches: [ "master" ]
   schedule:
-    - cron: '25 12 * * 2'
+    - cron: '13 9 * * 1'
 
 permissions:
   contents: read
 
 jobs:
   generate-and-upload:
-    runs-on: ocl-2cpu-8ram-dind
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v6
