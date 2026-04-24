@@ -27,4 +27,6 @@ var (
 	PrecompiledAddressesStartingFromArbOS41 []common.Address
 	PrecompiledContractsStartingFromArbOS50 = make(map[common.Address]PrecompiledContract)
 	PrecompiledAddressesStartingFromArbOS50 []common.Address
+	PrecompiledContractsStartingFromArbOS60 = make(map[common.Address]PrecompiledContract)
+	PrecompiledAddressesStartingFromArbOS60 []common.Address
 )
