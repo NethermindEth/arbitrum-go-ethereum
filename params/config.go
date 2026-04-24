@@ -1435,15 +1435,15 @@ func (err *ConfigCompatError) Error() string {
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	IsArbitrum, IsStylus, IsGreaterEqual41, IsDia           bool
-	ChainID                                                 *big.Int
-	ArbOSVersion                                            uint64
-	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
-	IsEIP2929, IsEIP4762                                    bool
-	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
-	IsBerlin, IsLondon                                      bool
-	IsMerge, IsShanghai, IsCancun, IsPrague, IsOsaka        bool
-	IsAmsterdam, IsVerkle                                   bool
+	IsArbitrum, IsStylus, IsGreaterEqual41, IsDia, IsGreaterEqual60 bool
+	ChainID                                                         *big.Int
+	ArbOSVersion                                                    uint64
+	IsHomestead, IsEIP150, IsEIP155, IsEIP158                       bool
+	IsEIP2929, IsEIP4762                                            bool
+	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul         bool
+	IsBerlin, IsLondon                                              bool
+	IsMerge, IsShanghai, IsCancun, IsPrague, IsOsaka                bool
+	IsAmsterdam, IsVerkle                                           bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -1460,6 +1460,7 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64, curren
 		IsStylus:         c.IsArbitrum() && currentArbosVersion >= ArbosVersion_Stylus,
 		IsGreaterEqual41: c.IsArbitrum() && currentArbosVersion >= ArbosVersion_41,
 		IsDia:            c.IsArbitrum() && currentArbosVersion >= ArbosVersion_Dia,
+		IsGreaterEqual60: c.IsArbitrum() && currentArbosVersion >= ArbosVersion_60,
 		ChainID:          new(big.Int).Set(chainID),
 		ArbOSVersion:     currentArbosVersion,
 		IsHomestead:      c.IsHomestead(num),
