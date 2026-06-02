@@ -140,8 +140,11 @@ func IntrinsicMultiGas(data []byte, accessList types.AccessList, authList []type
 		}
 	}
 	if accessList != nil {
-		gas.SaturatingIncrementInto(multigas.ResourceKindStorageAccess, uint64(len(accessList))*params.TxAccessListAddressGas)
-		gas.SaturatingIncrementInto(multigas.ResourceKindStorageAccess, uint64(accessList.StorageKeys())*params.TxAccessListStorageKeyGas)
+		// Access lists (EIP-2930) pre-warm addresses and storage keys so that subsequent reads
+		// are cheaper. This is a pre-paid read access fee — no persistent state is modified.
+		// See rationale in: https://github.com/OffchainLabs/nitro/blob/master/docs/decisions/0002-multi-dimensional-gas-metering.md
+		gas.SaturatingIncrementInto(multigas.ResourceKindStorageAccessRead, uint64(len(accessList))*params.TxAccessListAddressGas)
+		gas.SaturatingIncrementInto(multigas.ResourceKindStorageAccessRead, uint64(accessList.StorageKeys())*params.TxAccessListStorageKeyGas)
 	}
 	if authList != nil {
 		gas.SaturatingIncrementInto(multigas.ResourceKindStorageGrowth, uint64(len(authList))*params.CallNewAccountGas)
@@ -220,6 +223,7 @@ const (
 	messageEthcallMode
 	messageReplayMode
 	messageRecordingMode
+	messageSequencingMode
 )
 
 type MessageRunContext struct {
@@ -227,6 +231,12 @@ type MessageRunContext struct {
 
 	wasmCacheTag uint32
 	wasmTargets  []rawdb.WasmTarget
+}
+
+func NewMessageSequencingContext(wasmTargets []rawdb.WasmTarget) *MessageRunContext {
+	messageSequencingCtx := NewMessageCommitContext(wasmTargets)
+	messageSequencingCtx.runMode = messageSequencingMode
+	return messageSequencingCtx
 }
 
 func NewMessageCommitContext(wasmTargets []rawdb.WasmTarget) *MessageRunContext {
@@ -275,13 +285,17 @@ func NewMessageGasEstimationContext() *MessageRunContext {
 	}
 }
 
+func (c *MessageRunContext) IsSequencing() bool {
+	return c.runMode == messageSequencingMode
+}
+
 func (c *MessageRunContext) IsCommitMode() bool {
-	return c.runMode == messageCommitMode
+	return c.runMode == messageCommitMode || c.runMode == messageSequencingMode
 }
 
 // these message modes are executed onchain so cannot make any gas shortcuts
 func (c *MessageRunContext) IsExecutedOnChain() bool {
-	return c.runMode == messageCommitMode || c.runMode == messageReplayMode || c.runMode == messageRecordingMode
+	return c.IsCommitMode() || c.runMode == messageReplayMode || c.runMode == messageRecordingMode
 }
 
 func (c *MessageRunContext) IsGasEstimation() bool {
@@ -310,6 +324,8 @@ func (c *MessageRunContext) WasmTargets() []rawdb.WasmTarget {
 
 func (c *MessageRunContext) RunModeMetricName() string {
 	switch c.runMode {
+	case messageSequencingMode:
+		return "sequencing_runmode"
 	case messageCommitMode:
 		return "commit_runmode"
 	case messageGasEstimationMode:
@@ -611,8 +627,8 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	// 5. there is no overflow when calculating intrinsic gas
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
-	// Arbitrum: drop tip for delayed (and old) messages
-	if st.evm.ProcessingHook.DropTip() && st.msg.GasPrice.Cmp(st.evm.Context.BaseFee) > 0 {
+	// Arbitrum: drop tip when tip collection is not enabled
+	if !st.evm.ProcessingHook.CollectTips() && st.msg.GasPrice.Cmp(st.evm.Context.BaseFee) > 0 {
 		st.msg.GasPrice = st.evm.Context.BaseFee
 		st.msg.GasTipCap = common.Big0
 	}
@@ -768,13 +784,20 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		effectiveTip = new(big.Int).Sub(msg.GasPrice, st.evm.Context.BaseFee)
 	}
 	effectiveTipU256, _ := uint256.FromBig(effectiveTip)
+	gasUsed := st.gasUsed()
 
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
 	} else {
-		fee := new(uint256.Int).SetUint64(st.gasUsed())
+		// Only charge the tip on compute gas, not poster gas.
+		// The poster is compensated separately in EndTxHook.
+		computeGasUsed, posterGas := uint64(0), st.evm.ProcessingHook.PosterGas()
+		if gasUsed > posterGas {
+			computeGasUsed = gasUsed - posterGas
+		}
+		fee := new(uint256.Int).SetUint64(computeGasUsed)
 		fee.Mul(fee, effectiveTipU256)
 		st.state.AddBalance(tipReceipient, fee, tracing.BalanceIncreaseRewardTransactionFee)
 		tipAmount = fee.ToBig()
@@ -785,7 +808,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	}
 
 	// Arbitrum: record the tip
-	if tracer := st.evm.Config.Tracer; tracer != nil && !st.evm.ProcessingHook.DropTip() && tracer.CaptureArbitrumTransfer != nil {
+	if tracer := st.evm.Config.Tracer; tracer != nil && st.evm.ProcessingHook.CollectTips() && tracer.CaptureArbitrumTransfer != nil {
 		tracer.CaptureArbitrumTransfer(nil, &tipReceipient, tipAmount, false, tracing.BalanceIncreaseRewardTransactionFee)
 	}
 
@@ -801,7 +824,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	}
 
 	return &ExecutionResult{
-		UsedGas:          st.gasUsed(),
+		UsedGas:          gasUsed,
 		MaxUsedGas:       peakGasUsed,
 		Err:              vmerr,
 		ReturnData:       ret,
